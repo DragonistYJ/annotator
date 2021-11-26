@@ -10,20 +10,22 @@ router = APIRouter(prefix="/sentence")
 
 
 @router.get("/query")
-async def query(sentence_id: int = None, belong_document_id: int = None):
+async def query(sentence_id: str = None, belong_document_id: str = None, page: int = -1, size: int = -1):
     session = sessionmaker(engine)()
     query = session.query(Sentence)
     if sentence_id is not None:
         query = query.filter(Sentence.sentence_id == sentence_id)
     if belong_document_id is not None:
         query = query.filter(Sentence.belong_document_id == belong_document_id)
+    if page >= 0 and size >= 0:
+        query = query.limit(size).offset(page * size)
     sentence = query.all()
     session.close()
     return sentence
 
 
 class UpdateModel(BaseModel):
-    sentence_id: int
+    sentence_id: str
     context: List[Dict]
 
 
@@ -43,7 +45,7 @@ async def update(model: UpdateModel):
 
 
 class AddedSentence(BaseModel):
-    belong_document_id: int
+    belong_document_id: str
     sequence: int
     context: str
 
@@ -52,9 +54,13 @@ class AddedSentence(BaseModel):
 async def add(added_sentence: AddedSentence):
     context = added_sentence.context.split(" ")
     context = [{"word_id": i, "word": word, "label_id": 0} for i, word in enumerate(context)]
-    sentence = Sentence(belong_document_id=added_sentence.belong_document_id, sequence=added_sentence.sequence, context=context)
+    sentence = Sentence(belong_document_id=added_sentence.belong_document_id,
+                        sequence=added_sentence.sequence,
+                        context=context)
     session = sessionmaker(engine)()
-    session.query(Sentence).filter(Sentence.belong_document_id == added_sentence.belong_document_id, Sentence.sequence >= added_sentence.sequence).update({Sentence.sequence: Sentence.sequence + 1})
+    session.query(Sentence).filter(Sentence.belong_document_id == added_sentence.belong_document_id,
+                                   Sentence.sequence >= added_sentence.sequence).update(
+                                       {Sentence.sequence: Sentence.sequence + 1})
     session.add(sentence)
     session.commit()
     session.close()
@@ -62,7 +68,7 @@ async def add(added_sentence: AddedSentence):
 
 
 class TokenModel(BaseModel):
-    sentence_id: int
+    sentence_id: str
     word_id: int
     word: str
     label_id: int = 0
@@ -73,7 +79,7 @@ async def token_add(token: TokenModel):
     session = sessionmaker(engine)()
     sentence = session.query(Sentence).filter(Sentence.sentence_id == token.sentence_id).first()
     sentence.context.insert(token.word_id, {"word_id": token.word_id, "word": token.word, "label_id": token.label_id})
-    for i in range(token.word_id+1, len(sentence.context)):
+    for i in range(token.word_id + 1, len(sentence.context)):
         sentence.context[i]["word_id"] += 1
     session.query(Sentence).filter(Sentence.sentence_id == token.sentence_id).update({"context": sentence.context})
     session.commit()
@@ -82,7 +88,7 @@ async def token_add(token: TokenModel):
 
 
 @router.post("/token/delete")
-async def token_delete(sentence_id: int, word_id: int):
+async def token_delete(sentence_id: str, word_id: int):
     session = sessionmaker(engine)()
     sentence = session.query(Sentence).filter(Sentence.sentence_id == sentence_id).first()
     for token in sentence.context:
