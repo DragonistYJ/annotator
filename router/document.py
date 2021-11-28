@@ -11,7 +11,7 @@ sentence_id_worker = IdWorker(0, 1, 0)
 
 
 @router.get("/query")
-async def query(document_id: int = None, page: int = -1, size: int = -1):
+async def query(document_id: str = None, page: int = -1, size: int = -1):
     session = sessionmaker(engine)()
     query = session.query(Document)
     if document_id is not None:

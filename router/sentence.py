@@ -48,7 +48,7 @@ async def update(model: UpdateModel):
 
 
 @router.post("/split")
-async def split(sentence_id: int, word_id: int):
+async def split(sentence_id: str, word_id: int):
     """
     第word_id个拆分
     如[1,2,3,4,5] word_id=2拆分为
@@ -73,17 +73,21 @@ async def split(sentence_id: int, word_id: int):
 
 
 @router.post("/merge")
-async def merge(belong_document_id: int, sequence1: int, sequence2: int):
+async def merge(belong_document_id: str, sequence1: int, sequence2: int):
     session = sessionmaker(engine)()
-    sentence1 = session.query(Sentence).filter(Sentence.belong_document_id == belong_document_id, Sentence.sequence == sequence1).first()
-    sentence2 = session.query(Sentence).filter(Sentence.belong_document_id == belong_document_id, Sentence.sequence == sequence2).first()
+    sentence1 = session.query(Sentence).filter(Sentence.belong_document_id == belong_document_id,
+                                               Sentence.sequence == sequence1).first()
+    sentence2 = session.query(Sentence).filter(Sentence.belong_document_id == belong_document_id,
+                                               Sentence.sequence == sequence2).first()
     length = len(sentence1.context)
     for token in sentence2.context:
         token["word_id"] += length
     sentence1.context += sentence2.context
-    session.query(Sentence).filter(Sentence.sentence_id == sentence1.sentence_id).update({Sentence.context: sentence1.context})
+    session.query(Sentence).filter(Sentence.sentence_id == sentence1.sentence_id).update(
+        {Sentence.context: sentence1.context})
     session.query(Sentence).filter(Sentence.sentence_id == sentence2.sentence_id).delete()
-    session.query(Sentence).filter(Sentence.belong_document_id == belong_document_id, Sentence.sequence > sequence2).update({Sentence.sequence: Sentence.sequence - 1})
+    session.query(Sentence).filter(Sentence.belong_document_id == belong_document_id,
+                                   Sentence.sequence > sequence2).update({Sentence.sequence: Sentence.sequence - 1})
     session.commit()
     session.close()
     return {"status": "ok"}
@@ -99,7 +103,8 @@ class AddedSentence(BaseModel):
 async def add(added_sentence: AddedSentence):
     context = added_sentence.context.split(" ")
     context = [{"word_id": i, "word": word, "label_id": 0} for i, word in enumerate(context)]
-    sentence = Sentence(belong_document_id=added_sentence.belong_document_id,
+    sentence = Sentence(sentence_id=sentence_id_worker.get_id(),
+                        belong_document_id=added_sentence.belong_document_id,
                         sequence=added_sentence.sequence,
                         context=context)
     session = sessionmaker(engine)()
@@ -113,14 +118,26 @@ async def add(added_sentence: AddedSentence):
 
 
 @router.post("/delete")
-async def delete(sentence_id: int):
+async def delete(sentence_id: str):
+    print(sentence_id)
     session = sessionmaker(engine)()
     sentence = session.query(Sentence).filter(Sentence.sentence_id == sentence_id).first()
+    session.query(Sentence).filter(Sentence.belong_document_id == sentence.belong_document_id,
+                                   Sentence.sequence >= sentence.sequence).update(
+                                       {Sentence.sequence: Sentence.sequence - 1})
+    session.flush()
     session.query(Sentence).filter(Sentence.sentence_id == sentence_id).delete()
-    session.query(Sentence).filter(Sentence.belong_document_id == sentence.belong_document_id, Sentence.sequence >= sentence.sequence).update({Sentence.sequence: Sentence.sequence - 1})
     session.commit()
     session.close()
     return {"status": "ok"}
+
+
+@router.get("/count")
+async def count(belong_document_id: str):
+    session = sessionmaker(engine)()
+    count = session.query(Sentence).filter(Sentence.belong_document_id == belong_document_id).count()
+    session.close()
+    return {"status": "ok", "count": count}
 
 
 class TokenModel(BaseModel):
